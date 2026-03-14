@@ -4,11 +4,14 @@ Fetches headlines from BBC, CNN, Reuters, and RSS feeds.
 """
 
 import re
-import feedparser
+try:
+    import feedparser
+except ImportError:
+    feedparser = None
+
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-
 # RSS feeds (reliable, no scraping needed)
 RSS_FEEDS = [
     ("BBC Top Stories", "http://feeds.bbci.co.uk/news/rss.xml"),

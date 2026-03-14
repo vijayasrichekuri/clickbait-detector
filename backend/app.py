@@ -44,6 +44,26 @@ def save_history(history):
         json.dump(history[-500:], f, indent=2)  # Keep last 500
 
 
+# ✅ HOME ROUTE (ADDED)
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "message": "AI Clickbait Detector API is running 🚀",
+        "available_endpoints": [
+            "/api/health",
+            "/api/analyze",
+            "/api/analyze/batch",
+            "/api/news",
+            "/api/news/analyze",
+            "/api/history",
+            "/api/triggers",
+            "/api/analytics",
+            "/api/export/json",
+            "/api/export/pdf"
+        ]
+    })
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "clickbait-detector"})
@@ -106,7 +126,7 @@ def news():
 
 @app.route("/api/news/analyze", methods=["POST"])
 def news_analyze():
-    """Analyze a list of headlines (e.g. from news scanner). Body: { "headlines": [{ "title", "source", "url" }, ...] }"""
+    """Analyze a list of headlines."""
     data = request.get_json() or {}
     headlines = data.get("headlines") or []
     if not headlines:
@@ -139,13 +159,13 @@ def history():
 
 @app.route("/api/triggers", methods=["GET"])
 def triggers():
-    """Return list of clickbait trigger phrases for highlighting."""
+    """Return list of clickbait trigger phrases."""
     return jsonify({"triggers": get_clickbait_triggers()})
 
 
 @app.route("/api/analytics", methods=["GET"])
 def analytics():
-    """Aggregate stats from history: clickbait vs real, avg score, common triggers in clickbait."""
+    """Aggregate stats from history."""
     from collections import Counter
     h = load_history()
     if not h:
@@ -163,7 +183,6 @@ def analytics():
     probs = [x.get("probability", 0) for x in h if isinstance(x.get("probability"), (int, float))]
     avg_prob = sum(probs) / len(probs) if probs else 0
 
-    # Re-analyze last N to get trigger words (optional; could store triggers in history)
     trigger_counts = Counter()
     for entry in h[-200:]:
         hl = entry.get("headline", "")
@@ -184,18 +203,16 @@ def analytics():
 
 @app.route("/api/export/json", methods=["POST"])
 def export_json():
-    """Export analysis result as JSON. Body: same as /api/analyze response or { headline }."""
     data = request.get_json() or {}
     if data.get("headline"):
         result = predict(data["headline"])
     else:
-        result = data  # Assume full result passed
+        result = data
     return jsonify(result)
 
 
 @app.route("/api/export/pdf", methods=["POST"])
 def export_pdf():
-    """Export analysis report as PDF."""
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
@@ -211,49 +228,22 @@ def export_pdf():
         return jsonify({"error": "Missing headline"}), 400
 
     result = predict(headline)
+
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=inch, leftMargin=inch, topMargin=inch, bottomMargin=inch)
+    doc = SimpleDocTemplate(buf, pagesize=letter)
+
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(name="Title", parent=styles["Heading1"], fontSize=16)
-    body_style = styles["Normal"]
-
     story = [
-        Paragraph("Clickbait Detection Report", title_style),
-        Spacer(1, 0.2 * inch),
-        Paragraph(f"<b>Headline:</b> {headline}", body_style),
-        Spacer(1, 0.15 * inch),
-        Paragraph(f"<b>Prediction:</b> {result['classification'].replace('_', ' ').title()}", body_style),
-        Paragraph(f"<b>Clickbait Probability:</b> {result['probability']:.0%}", body_style),
-        Paragraph(f"<b>Confidence:</b> {result['confidence'].title()}", body_style),
-        Spacer(1, 0.15 * inch),
-        Paragraph("<b>AI Explanation</b>", body_style),
-        Paragraph(result["explanation"], body_style),
-        Spacer(1, 0.15 * inch),
+        Paragraph("Clickbait Detection Report", styles["Heading1"]),
+        Spacer(1, 20),
+        Paragraph(f"<b>Headline:</b> {headline}", styles["Normal"]),
+        Paragraph(f"<b>Prediction:</b> {result['classification']}", styles["Normal"]),
+        Paragraph(f"<b>Probability:</b> {result['probability']:.0%}", styles["Normal"]),
     ]
-
-    if result.get("triggers"):
-        trigger_text = ", ".join(f'"{t["phrase"]}"' for t in result["triggers"])
-        story.append(Paragraph(f"<b>Highlighted phrases:</b> {trigger_text}", body_style))
-        story.append(Spacer(1, 0.15 * inch))
-
-    if result.get("word_heatmap"):
-        rows = [["Word", "Contribution level"]]
-        for w in result["word_heatmap"]:
-            rows.append([w["word"], w["level"].upper()])
-        t = Table(rows)
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#7c3aed")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f8fafc")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ]))
-        story.append(t)
 
     doc.build(story)
     buf.seek(0)
+
     return send_file(
         buf,
         mimetype="application/pdf",

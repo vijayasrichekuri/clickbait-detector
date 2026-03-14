@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+.Python
+*.so
+
+# Build & cache
+frontend/dist/
+*.tsbuildinfo
+backend/model.pkl
+backend/data/
+
+# Env
+.env
+.env.local
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

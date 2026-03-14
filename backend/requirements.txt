@@ -2,14 +2,13 @@
 flask==3.0.0
 flask-cors==4.0.0
 
-# Machine Learning (numpy 2.x for compatibility with other packages e.g. OpenCV)
+# Machine Learning
 numpy>=2.0,<3
 scikit-learn>=1.4,<2
 
 # Web Scraping
 beautifulsoup4==4.12.2
 requests==2.31.0
-feedparser==6.0.10
 
 # PDF Export
 reportlab==4.0.7

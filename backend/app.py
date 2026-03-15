@@ -16,7 +16,7 @@ from model import predict, get_clickbait_triggers
 from scraper import fetch_all_headlines
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
+CORS(app, origins=["https://clickbait-detector-j4t7.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000"])
 
 # In-memory history (use JSON file for persistence across restarts)
 DATA_DIR = Path(__file__).parent / "data"

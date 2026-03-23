@@ -1,95 +1,64 @@
 """
-Real-time news headline scraper.
-Fetches headlines from BBC, CNN, Reuters, and RSS feeds.
+Real-time news headlines via NewsAPI (top headlines for the US).
 """
 
-import re
-try:
-    import feedparser
-except ImportError:
-    feedparser = None
+import os
 
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
-# RSS feeds (reliable, no scraping needed)
-RSS_FEEDS = [
-    ("BBC Top Stories", "http://feeds.bbci.co.uk/news/rss.xml"),
-    ("BBC World", "http://feeds.bbci.co.uk/news/world/rss.xml"),
-    ("CNN Top Stories", "http://rss.cnn.com/rss/cnn_topstories.rss"),
-    ("NPR News", "https://feeds.npr.org/1001/rss.xml"),
-    ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
-    ("Reuters", "https://feeds.reuters.com/reuters/topNews"),
-]
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
+# NEWS_API_KEY must be set in the environment — add NEWS_API_KEY=your_key to a .env file
+# and load it before starting the app (e.g. python-dotenv in app entrypoint), or export it in the shell.
 
 
-def fetch_rss_headlines(max_per_feed=5, max_total=30):
+def fetch_news_api():
     """
-    Fetch headlines from RSS feeds.
-    Returns list of { "title": str, "source": str, "url": str }
+    Call NewsAPI top-headlines (country=us, pageSize=30).
+    Returns list of { "title": str, "source": str, "url": str }.
+    On failure or missing key, returns [] and prints an error for debugging.
     """
-    headlines = []
-    seen_titles = set()
-
-    for source_name, url in RSS_FEEDS:
-        try:
-            resp = requests.get(url, timeout=10, headers={"User-Agent": USER_AGENT})
-            resp.raise_for_status()
-            feed = feedparser.parse(resp.content)
-            count = 0
-            for entry in feed.entries:
-                if count >= max_per_feed:
-                    break
-                title = (entry.get("title") or "").strip()
-                if not title or title in seen_titles:
-                    continue
-                seen_titles.add(title)
-                link = entry.get("link") or ""
-                headlines.append({"title": title, "source": source_name, "url": link})
-                count += 1
-        except Exception:
-            continue
-
-    return headlines[:max_total]
-
-
-def fetch_bbc_headlines():
-    """Scrape BBC News homepage for headline titles (fallback)."""
-    url = "https://www.bbc.com/news"
-    try:
-        resp = requests.get(url, timeout=10, headers={"User-Agent": USER_AGENT})
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        headlines = []
-        for tag in soup.select("[data-testid='card-headline'], .gs-c-promo-heading__title"):
-            t = tag.get_text(strip=True)
-            if t and len(t) > 10 and len(t) < 200:
-                link = tag.find_parent("a")
-                href = link.get("href", "") if link else ""
-                if href and not href.startswith("http"):
-                    href = urljoin("https://www.bbc.com", href)
-                headlines.append({"title": t, "source": "BBC News", "url": href or url})
-        return headlines[:15]
-    except Exception:
+    api_key = (os.environ.get("NEWS_API_KEY") or "").strip()
+    if not api_key:
+        print("NewsAPI: NEWS_API_KEY is missing; add it to a .env file or the environment.")
         return []
+
+    url = "https://newsapi.org/v2/top-headlines"
+    params = {"country": "us", "pageSize": 30, "apiKey": api_key}
+
+    try:
+        resp = requests.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        print(f"NewsAPI request failed: {e}")
+        return []
+    except ValueError as e:
+        print(f"NewsAPI response JSON error: {e}")
+        return []
+
+    if data.get("status") != "ok":
+        print(f"NewsAPI error: {data.get('message', data)}")
+        return []
+
+    out = []
+    for article in data.get("articles") or []:
+        title = (article.get("title") or "").strip()
+        if not title:
+            continue
+        src = article.get("source") or {}
+        if isinstance(src, dict):
+            source_name = (src.get("name") or "").strip() or "Unknown"
+        else:
+            source_name = str(src) if src else "Unknown"
+        link = (article.get("url") or "").strip()
+        out.append({"title": title, "source": source_name, "url": link})
+
+    return out
 
 
 def fetch_all_headlines(max_total=30):
     """
-    Fetch headlines from RSS first; optionally supplement with BBC scrape.
+    Fetch headlines from NewsAPI.
     Returns list of { "title": str, "source": str, "url": str }
     """
-    items = fetch_rss_headlines(max_per_feed=8, max_total=max_total)
-    if len(items) < max_total:
-        bbc = fetch_bbc_headlines()
-        seen = {h["title"] for h in items}
-        for h in bbc:
-            if h["title"] not in seen and len(items) < max_total:
-                seen.add(h["title"])
-                items.append(h)
-    return items
+    items = fetch_news_api()
+    return items[:max_total]
